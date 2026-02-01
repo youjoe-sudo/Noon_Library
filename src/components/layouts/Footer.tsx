@@ -1,9 +1,20 @@
 // مكون التذييل (Footer Component)
 import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Instagram, Mail } from 'lucide-react';
+import { Facebook, Instagram, Mail, Send } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const { toast } = useToast();
+
+  // دالة لعرض تنبيه سياسة الإرجاع (Return Policy Alert)
+  const handleReturnPolicyClick = () => {
+    toast({
+      title: 'سياسة الإرجاع',
+      description: 'غير متاح سياسة الإرجاع لأنه متاح معاينة الأوردر قبل الاستلام',
+      duration: 5000,
+    });
+  };
 
   return (
     <footer className="border-t bg-card mt-auto">
@@ -44,10 +55,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <span className="text-muted-foreground">سياسة الإرجاع</span>
-              </li>
-              <li>
-                <span className="text-muted-foreground">الشحن والتوصيل</span>
+                <button
+                  onClick={handleReturnPolicyClick}
+                  className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                >
+                  سياسة الإرجاع
+                </button>
               </li>
             </ul>
           </div>
@@ -56,16 +69,38 @@ export function Footer() {
           <div>
             <h4 className="font-semibold mb-4" dir="rtl">تواصل معنا</h4>
             <div className="flex gap-4 mb-4">
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a
+                href="https://www.facebook.com/share/19UjSNobdA/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Facebook"
+              >
                 <Facebook className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                <Twitter className="h-5 w-5" />
-              </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a
+                href="https://www.instagram.com/noon_library123?igsh=Zzd0eDhmd3VkcnNp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Instagram"
+              >
                 <Instagram className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a
+                href="https://t.me/noonlibrary23"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Telegram"
+              >
+                <Send className="h-5 w-5" />
+              </a>
+              <a
+                href="mailto:hanen.said10027@gmail.com"
+                className="text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Email"
+              >
                 <Mail className="h-5 w-5" />
               </a>
             </div>
