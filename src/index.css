@@ -1,0 +1,134 @@
+/* stylelint-disable */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here.
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+    /* نظام الألوان لمكتبة نون - الوضع الفاتح (Noon Library Light Theme) */
+    --background: 210 20% 98%;
+    --foreground: 217 33% 17%;
+    --card: 0 0% 100%;
+    --card-foreground: 217 33% 17%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 217 33% 17%;
+    /* اللون الأساسي - أزرق داكن للثقة (Primary - Deep Blue for Trust) */
+    --primary: 217 70% 31%;
+    --primary-foreground: 0 0% 100%;
+    /* اللون الثانوي - أزرق فاتح (Secondary - Light Blue) */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 217 70% 31%;
+    /* اللون المكتوم (Muted) */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    /* اللون المميز - ذهبي للقيمة (Accent - Golden for Value) */
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 100%;
+    /* اللون التدميري (Destructive) */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    /* الحدود والإدخال (Borders and Input) */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 70% 31%;
+    /* ألوان الرسوم البيانية (Chart Colors) */
+    --chart-1: 217 70% 31%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 173 58% 39%;
+    --chart-4: 197 37% 24%;
+    --chart-5: 43 74% 66%;
+    /* الشريط الجانبي (Sidebar) */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 217 33% 17%;
+    --sidebar-primary: 217 70% 31%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 217 70% 31%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 217 70% 31%;
+    /* ألوان النجاح والتحذير والمعلومات (Success, Warning, Info) */
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --info: 217 70% 31%;
+  }
+
+  .dark {
+    /* نظام الألوان لمكتبة نون - الوضع الداكن (Noon Library Dark Theme) */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 217 33% 17%;
+    --card-foreground: 210 40% 98%;
+    --popover: 217 33% 17%;
+    --popover-foreground: 210 40% 98%;
+    /* اللون الأساسي - أزرق فاتح في الوضع الداكن (Primary - Light Blue in Dark Mode) */
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    /* اللون الثانوي (Secondary) */
+    --secondary: 217 33% 20%;
+    --secondary-foreground: 210 40% 98%;
+    /* اللون المكتوم (Muted) */
+    --muted: 217 33% 20%;
+    --muted-foreground: 215 20% 65%;
+    /* اللون المميز - ذهبي (Accent - Golden) */
+    --accent: 38 92% 50%;
+    --accent-foreground: 222 47% 11%;
+    /* اللون التدميري (Destructive) */
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    /* الحدود والإدخال (Borders and Input) */
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 217 91% 60%;
+    /* ألوان الرسوم البيانية (Chart Colors) */
+    --chart-1: 217 91% 60%;
+    --chart-2: 38 92% 50%;
+    --chart-3: 160 60% 45%;
+    --chart-4: 30 80% 55%;
+    --chart-5: 280 65% 60%;
+    /* الشريط الجانبي (Sidebar) */
+    --sidebar-background: 217 33% 17%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 25%;
+    --sidebar-ring: 217 91% 60%;
+    /* ألوان النجاح والتحذير والمعلومات (Success, Warning, Info) */
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+
+  /* دعم RTL للغة العربية (RTL Support for Arabic) */
+  [dir="rtl"] {
+    direction: rtl;
+  }
+}
+
+@layer utilities {
+  /* فئة نص متدرج (Gradient text utility) */
+  .gradient-text {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+}
