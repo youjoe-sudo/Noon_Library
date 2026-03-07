@@ -617,6 +617,19 @@ export const getAffiliateByUserId = async (userId: string) => {
   return data;
 };
 
+// Get affiliate by referral code
+export const getAffiliateByReferralCode = async (referralCode: string) => {
+  const { data, error } = await supabase
+    .from('affiliates')
+    .select('id, business_name, commission_rate, status')
+    .eq('referral_code', referralCode)
+    .eq('status', 'active')
+    .maybeSingle();
+  
+  if (error) throw error;
+  return data;
+};
+
 // Get affiliate links
 export const getAffiliateLinks = async (affiliateId: string) => {
   const { data, error } = await supabase

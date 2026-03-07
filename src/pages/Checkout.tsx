@@ -1,6 +1,6 @@
 // صفحة الدفع (Checkout Page)
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { Button } from '@/components/ui/button';
@@ -12,12 +12,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
-import { getAddresses, createOrder, createOrderItems, validateCoupon, incrementCouponUsage, createCouponUsage, calculateShippingCost } from '@/db/api';
+import { getAddresses, createOrder, createOrderItems, validateCoupon, incrementCouponUsage, createCouponUsage, calculateShippingCost, getAffiliateByReferralCode } from '@/db/api';
 import type { Address } from '@/types';
 import { Loader2, MapPin, Tag, Navigation } from 'lucide-react';
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { cartItems, cartTotal, clearCart } = useCart();
 
@@ -26,6 +27,9 @@ export default function Checkout() {
   const [showNewAddress, setShowNewAddress] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+
+  // حالة المسوق (Affiliate state)
+  const [affiliateId, setAffiliateId] = useState<string | null>(null);
 
   // حالة الكوبون (Coupon state)
   const [couponCode, setCouponCode] = useState('');
@@ -62,6 +66,39 @@ export default function Checkout() {
       loadAddresses();
     }
   }, [user]);
+
+  // تتبع رابط المسوق (Track affiliate referral)
+  useEffect(() => {
+    const checkAffiliateCode = async () => {
+      // التحقق من وجود كود في URL
+      const refCode = searchParams.get('ref');
+      
+      // التحقق من وجود كود محفوظ في localStorage
+      const storedRefCode = localStorage.getItem('affiliate_ref');
+      
+      const codeToUse = refCode || storedRefCode;
+      
+      if (codeToUse) {
+        try {
+          // حفظ الكود في localStorage إذا جاء من URL
+          if (refCode) {
+            localStorage.setItem('affiliate_ref', refCode);
+          }
+          
+          // الحصول على معلومات المسوق
+          const affiliate = await getAffiliateByReferralCode(codeToUse);
+          if (affiliate) {
+            setAffiliateId(affiliate.id);
+            console.log('✅ Affiliate tracked:', affiliate.business_name);
+          }
+        } catch (error) {
+          console.error('Error tracking affiliate:', error);
+        }
+      }
+    };
+    
+    checkAffiliateCode();
+  }, [searchParams]);
 
   const loadAddresses = async () => {
     if (!user) return;
@@ -306,6 +343,7 @@ export default function Checkout() {
         discount_amount: couponDiscount,
         deposit_amount: shippingCost, // العربون = تكلفة الشحن
         coupon_id: appliedCoupon?.coupon_id || null,
+        affiliate_id: affiliateId, // ربط الطلب بالمسوق
         payment_method: formData.payment_method,
         shipping_method: formData.shipping_method,
         status: 'pending_payment', // حالة انتظار الدفع
