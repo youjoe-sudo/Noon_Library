@@ -1,5 +1,5 @@
 // تطبيق مكتبة نون (Noon Library App)
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import IntersectObserver from '@/components/common/IntersectObserver';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -9,9 +9,27 @@ import { RouteGuard } from '@/components/common/RouteGuard';
 import { Header } from '@/components/layouts/Header';
 import { Footer } from '@/components/layouts/Footer';
 import { Toaster } from '@/components/ui/toaster';
+import { recordTrackingClick } from '@/db/api'; // استيراد دالة تسجيل النقرات
 import routes from './routes';
 
 const App: React.FC = () => {
+  // --- كود تتبع المسوقين الجديد ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    
+    if (refCode) {
+      // تخزين الكود عشان يفضل معانا حتى لو العميل قفل الموقع ورجع تاني
+      localStorage.setItem('affiliate_ref', refCode);
+      
+      // تسجيل النقرة في الداتا بيز للإحصائيات
+      recordTrackingClick(refCode).catch(err => {
+        console.error('Failed to record click:', err);
+      });
+    }
+  }, []);
+  // ------------------------------
+
   return (
     <Router>
       <ThemeProvider>

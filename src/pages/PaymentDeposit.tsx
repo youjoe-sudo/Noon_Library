@@ -222,7 +222,7 @@ export default function PaymentDeposit() {
                     <p className="font-semibold">حول العربون إلى:</p>
                     <div className="bg-muted p-3 rounded-md">
                       <p className="text-sm">فودافون كاش</p>
-                      <p className="text-lg font-mono font-bold">01012345678</p>
+                      <p className="text-lg font-mono font-bold">01021671068</p>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       أو عبر InstaPay / تحويل بنكي

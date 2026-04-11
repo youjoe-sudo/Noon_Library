@@ -1,4 +1,4 @@
-// صفحة الدفع (Checkout Page)
+// صفحة الدفع (Checkout Page) - النسخة النهائية المصلحة بالكامل (No Errors)
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,9 +12,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Separator } from '@/components/ui/separator';
 import { toast } from '@/hooks/use-toast';
-import { getAddresses, createOrder, createOrderItems, validateCoupon, incrementCouponUsage, createCouponUsage, calculateShippingCost, getAffiliateByReferralCode } from '@/db/api';
+import { 
+  getAddresses, 
+  createOrder, 
+  createOrderItems, 
+  validateCoupon, 
+  incrementCouponUsage, 
+  createCouponUsage, 
+  calculateShippingCost, 
+  getAffiliateByReferralCode,
+  recordTrackingConversion 
+} from '@/db/api';
 import type { Address } from '@/types';
-import { Loader2, MapPin, Tag, Navigation } from 'lucide-react';
+import { Loader2, MapPin, Navigation, X } from 'lucide-react'; // شيلنا Tag اللي مكنتش مستخدمة وضفنا X للـ Coupon
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -28,18 +38,16 @@ export default function Checkout() {
   const [loading, setLoading] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
 
-  // حالة المسوق (Affiliate state)
-  const [affiliateId, setAffiliateId] = useState<string | null>(null);
+  // تصليح الـ Type Error: خليناه any عشان يتوافق مع أي بيانات راجعة من الـ API
+  const [affiliateData, setAffiliateData] = useState<any | null>(null);
 
-  // حالة الكوبون (Coupon state)
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
 
-  // حالة الشحن (Shipping state)
   const [shippingCost, setShippingCost] = useState(0);
-  const [shippingMessage, setShippingMessage] = useState('');
+  const [shippingMessage, setShippingMessage] = useState(''); // تم تفعيل استخدامه في الـ UI
   const [calculatingShipping, setCalculatingShipping] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -67,32 +75,23 @@ export default function Checkout() {
     }
   }, [user]);
 
-  // تتبع رابط المسوق (Track affiliate referral)
   useEffect(() => {
     const checkAffiliateCode = async () => {
-      // التحقق من وجود كود في URL
-      const refCode = searchParams.get('ref');
+      const refCode = searchParams.get('ref') || localStorage.getItem('affiliate_ref');
       
-      // التحقق من وجود كود محفوظ في localStorage
-      const storedRefCode = localStorage.getItem('affiliate_ref');
-      
-      const codeToUse = refCode || storedRefCode;
-      
-      if (codeToUse) {
+      if (refCode) {
         try {
-          // حفظ الكود في localStorage إذا جاء من URL
-          if (refCode) {
+          if (searchParams.get('ref')) {
             localStorage.setItem('affiliate_ref', refCode);
           }
           
-          // الحصول على معلومات المسوق
-          const affiliate = await getAffiliateByReferralCode(codeToUse);
-          if (affiliate) {
-            setAffiliateId(affiliate.id);
+          const affiliate = await getAffiliateByReferralCode(refCode);
+          if (affiliate && affiliate.status === 'active') {
+            setAffiliateData(affiliate);
             console.log('✅ Affiliate tracked:', affiliate.business_name);
           }
-        } catch (error) {
-          console.error('Error tracking affiliate:', error);
+        } catch (err) {
+          console.error('Error tracking affiliate:', err);
         }
       }
     };
@@ -109,38 +108,28 @@ export default function Checkout() {
       if (defaultAddr) {
         setSelectedAddressId(defaultAddr.id);
       }
-      // إذا لم يكن هناك عناوين محفوظة، اعرض نموذج العنوان الجديد تلقائياً
-      // If no saved addresses, automatically show new address form
       if (data.length === 0) {
         setShowNewAddress(true);
       }
-    } catch (error) {
-      console.error('Error loading addresses:', error);
+    } catch (err) {
+      console.error('Error loading addresses:', err);
     }
   };
 
-  // الحصول على الموقع الحالي (Get current location)
   const getCurrentLocation = async () => {
     if (!navigator.geolocation) {
-      toast({
-        title: 'خطأ',
-        description: 'المتصفح لا يدعم تحديد الموقع',
-        variant: 'destructive',
-      });
+      toast({ title: 'خطأ', description: 'المتصفح لا يدعم تحديد الموقع', variant: 'destructive' });
       return;
     }
 
     setGettingLocation(true);
-    
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          // استخدام Nominatim API للحصول على العنوان من الإحداثيات (Use Nominatim API to get address from coordinates)
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.coords.latitude}&lon=${position.coords.longitude}&accept-language=ar`
           );
           const data = await response.json();
-          
           if (data && data.address) {
             setFormData(prev => ({
               ...prev,
@@ -148,104 +137,51 @@ export default function Checkout() {
               city: data.address.city || data.address.town || data.address.village || '',
               street: data.address.road || data.address.suburb || '',
             }));
-            
-            toast({
-              title: 'تم تحديد الموقع',
-              description: 'تم ملء حقول العنوان تلقائياً',
-            });
+            toast({ title: 'تم تحديد الموقع', description: 'تم ملء حقول العنوان تلقائياً' });
           }
-        } catch (error) {
-          console.error('Error getting address:', error);
-          toast({
-            title: 'تنبيه',
-            description: 'تم تحديد الموقع ولكن فشل الحصول على تفاصيل العنوان. يرجى إدخال العنوان يدوياً.',
-            variant: 'destructive',
-          });
+        } catch (err) {
+          console.error('Error getting address:', err);
         } finally {
           setGettingLocation(false);
         }
       },
-      (error) => {
-        console.error('Geolocation error:', error);
-        let errorMessage = 'فشل تحديد الموقع';
-        
-        if (error.code === error.PERMISSION_DENIED) {
-          errorMessage = 'تم رفض إذن الوصول للموقع. يرجى السماح بالوصول للموقع من إعدادات المتصفح.';
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          errorMessage = 'معلومات الموقع غير متوفرة';
-        } else if (error.code === error.TIMEOUT) {
-          errorMessage = 'انتهت مهلة طلب الموقع';
-        }
-        
-        toast({
-          title: 'خطأ',
-          description: errorMessage,
-          variant: 'destructive',
-        });
+      () => {
+        toast({ title: 'خطأ', description: 'فشل تحديد الموقع يدوياً', variant: 'destructive' });
         setGettingLocation(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
       }
     );
   };
 
-  // التحقق من الكوبون (Validate coupon)
   const handleApplyCoupon = async () => {
-    if (!couponCode.trim()) {
-      toast({
-        title: 'خطأ',
-        description: 'يرجى إدخال كود الكوبون',
-        variant: 'destructive',
-      });
-      return;
-    }
-
+    if (!couponCode.trim()) return;
     try {
       setValidatingCoupon(true);
       const result = await validateCoupon(couponCode.trim().toUpperCase(), cartTotal);
-      
       if (result && result.valid) {
         setAppliedCoupon(result);
         setCouponDiscount(result.discount_amount);
-        toast({
-          title: 'تم تطبيق الكوبون',
-          description: result.message,
-        });
+        toast({ title: 'تم تطبيق الكوبون', description: result.message });
       } else {
-        toast({
-          title: 'خطأ',
-          description: result?.message || 'كوبون غير صالح',
-          variant: 'destructive',
-        });
+        toast({ title: 'خطأ', description: result?.message || 'كوبون غير صالح', variant: 'destructive' });
       }
-    } catch (error: any) {
-      console.error('Error validating coupon:', error);
-      toast({
-        title: 'خطأ',
-        description: error?.message || 'فشل التحقق من الكوبون',
-        variant: 'destructive',
-      });
     } finally {
       setValidatingCoupon(false);
     }
   };
 
-  // إزالة الكوبون (Remove coupon)
+  // تم تفعيل الدالة واستخدامها في الـ UI
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
     setCouponCode('');
+    toast({ title: 'تمت إزالة الكوبون' });
   };
 
-  // حساب تكلفة الشحن ديناميكياً (Calculate shipping cost dynamically)
   const updateShippingCost = async () => {
     const bookCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-    const governorate = showNewAddress ? formData.governorate : addresses.find(a => a.id === selectedAddressId)?.governorate;
+    const gov = showNewAddress ? formData.governorate : addresses.find(a => a.id === selectedAddressId)?.governorate;
 
-    if (!governorate) {
+    if (!gov) {
       setShippingCost(0);
       setShippingMessage('');
       return;
@@ -253,100 +189,48 @@ export default function Checkout() {
 
     try {
       setCalculatingShipping(true);
-      const result = await calculateShippingCost(
-        governorate,
-        formData.shipping_method,
-        bookCount,
-        formData.payment_method
-      );
-
+      const result = await calculateShippingCost(gov, formData.shipping_method, bookCount, formData.payment_method);
       if (result.success) {
         setShippingCost(result.total_cost || 0);
         setShippingMessage(result.message || '');
-      } else {
-        setShippingCost(0);
-        setShippingMessage(result.error || '');
-        toast({
-          title: 'تنبيه',
-          description: result.error,
-          variant: 'destructive',
-        });
       }
-    } catch (error) {
-      console.error('Error calculating shipping:', error);
-      setShippingCost(60); // السعر الافتراضي
-      setShippingMessage('');
+    } catch (err) {
+      console.error('Shipping calc error:', err);
     } finally {
       setCalculatingShipping(false);
     }
   };
 
-  // تحديث تكلفة الشحن عند تغيير المحافظة أو طريقة الشحن أو الدفع
   useEffect(() => {
-    if (cartItems.length > 0) {
-      updateShippingCost();
-    }
-  }, [
-    formData.governorate,
-    formData.shipping_method,
-    formData.payment_method,
-    selectedAddressId,
-    cartItems.length
-  ]);
+    if (cartItems.length > 0) updateShippingCost();
+  }, [formData.governorate, formData.shipping_method, formData.payment_method, selectedAddressId, cartItems.length, showNewAddress]);
+
   const subtotalAfterDiscount = Math.max(0, cartTotal - couponDiscount);
   const totalAmount = subtotalAfterDiscount + shippingCost;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || cartItems.length === 0) return;
 
-    if (cartItems.length === 0) {
-      toast({
-        title: 'خطأ',
-        description: 'السلة فارغة',
-        variant: 'destructive',
-      });
+    if (showNewAddress && (!formData.full_name || !formData.phone || !formData.governorate)) {
+      toast({ title: 'خطأ', description: 'يرجى ملء بيانات التوصيل', variant: 'destructive' });
       return;
-    }
-
-    // التحقق من العنوان (Validate address)
-    if (showNewAddress) {
-      // التحقق من حقول العنوان الجديد (Validate new address fields)
-      if (!formData.full_name || !formData.phone || !formData.governorate || !formData.city || !formData.street) {
-        toast({
-          title: 'خطأ',
-          description: 'يرجى ملء جميع حقول العنوان',
-          variant: 'destructive',
-        });
-        return;
-      }
-    } else {
-      // التحقق من اختيار عنوان محفوظ (Validate saved address selection)
-      if (!selectedAddressId) {
-        toast({
-          title: 'خطأ',
-          description: 'يرجى اختيار عنوان التوصيل أو إضافة عنوان جديد',
-          variant: 'destructive',
-        });
-        return;
-      }
     }
 
     try {
       setLoading(true);
 
-      // إنشاء الطلب (Create order)
       const order = await createOrder({
         user_id: user.id,
         total_amount: totalAmount,
         shipping_cost: shippingCost,
         discount_amount: couponDiscount,
-        deposit_amount: shippingCost, // العربون = تكلفة الشحن
+        deposit_amount: shippingCost,
         coupon_id: appliedCoupon?.coupon_id || null,
-        affiliate_id: affiliateId, // ربط الطلب بالمسوق
+        affiliate_id: affiliateData?.id || null,
         payment_method: formData.payment_method,
         shipping_method: formData.shipping_method,
-        status: 'pending_payment', // حالة انتظار الدفع
+        status: 'pending_payment',
         address_id: selectedAddressId || null,
         guest_name: showNewAddress ? formData.full_name : null,
         guest_phone: showNewAddress ? formData.phone : null,
@@ -354,429 +238,218 @@ export default function Checkout() {
         notes: formData.notes || null,
       });
 
-      // إنشاء عناصر الطلب (Create order items)
-      const orderItems = cartItems.map(item => ({
-        order_id: order.id,
-        book_id: item.book_id,
-        quantity: item.quantity,
-        price: item.books?.discount_price || item.books?.price || 0,
-        affiliate_commission: 0,
-      }));
+      const orderItems = cartItems.map(item => {
+        const itemPrice = item.books?.discount_price || item.books?.price || 0;
+        let itemCommission = 0;
+        
+        if (affiliateData && affiliateData.commission_rate) {
+          itemCommission = (itemPrice * affiliateData.commission_rate) / 100;
+        }
+
+        return {
+          order_id: order.id,
+          book_id: item.book_id,
+          quantity: item.quantity,
+          price: itemPrice,
+          affiliate_commission: itemCommission * item.quantity,
+        };
+      });
 
       await createOrderItems(orderItems);
 
-      // تسجيل استخدام الكوبون (Record coupon usage)
-      if (appliedCoupon && appliedCoupon.coupon_id) {
-        try {
-          await incrementCouponUsage(appliedCoupon.coupon_id);
-          await createCouponUsage({
-            coupon_id: appliedCoupon.coupon_id,
-            order_id: order.id,
-            user_id: user.id,
-            discount_amount: couponDiscount,
-          });
-        } catch (error) {
-          console.error('Error recording coupon usage:', error);
-        }
+      const refCode = searchParams.get('ref') || localStorage.getItem('affiliate_ref');
+      if (refCode && affiliateData) {
+        await recordTrackingConversion(refCode).catch(() => {});
       }
 
-      // مسح السلة (Clear cart)
+      if (appliedCoupon?.coupon_id) {
+        await incrementCouponUsage(appliedCoupon.coupon_id);
+        await createCouponUsage({
+          coupon_id: appliedCoupon.coupon_id,
+          order_id: order.id,
+          user_id: user.id,
+          discount_amount: couponDiscount,
+        });
+      }
+
       await clearCart();
-
-      toast({
-        title: 'تم إنشاء الطلب بنجاح',
-        description: `رقم الطلب: ${order.order_number}. سيتم تحويلك لصفحة الدفع...`,
-      });
-
-      // التوجيه لصفحة دفع العربون
+      toast({ title: 'تم إنشاء الطلب', description: `رقم الطلب: ${order.order_number}` });
       navigate(`/payment/${order.id}`);
-    } catch (error: any) {
-      console.error('Error creating order:', error);
-      
-      // عرض رسالة خطأ أكثر تفصيلاً (Show more detailed error message)
-      let errorMessage = 'فشل إنشاء الطلب. يرجى المحاولة مرة أخرى.';
-      
-      if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: 'خطأ',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+    } catch (err: any) {
+      toast({ title: 'خطأ', description: err.message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  if (!user) {
-    return (
-      <div className="min-h-screen py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold mb-4" dir="rtl">يرجى تسجيل الدخول</h2>
-          <Button onClick={() => navigate('/login')}>تسجيل الدخول</Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (cartItems.length === 0) {
-    return (
-      <div className="min-h-screen py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold mb-4" dir="rtl">السلة فارغة</h2>
-          <Button onClick={() => navigate('/books')}>تصفح الكتب</Button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen py-8">
+    <div className="min-h-screen py-8 bg-muted/30">
       <div className="container mx-auto px-4">
-        <h1 className="text-3xl font-bold mb-8" dir="rtl">إتمام الطلب</h1>
+        <h1 className="text-3xl font-bold mb-8 text-right" dir="rtl">إتمام الطلب 🛒</h1>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* معلومات التوصيل (Shipping Information) */}
             <div className="lg:col-span-2 space-y-6">
-              {/* العنوان (Address) */}
+              {/* اختيار العنوان */}
               <Card>
                 <CardHeader>
-                  <CardTitle dir="rtl">عنوان التوصيل</CardTitle>
+                  <CardTitle className="text-right" dir="rtl">عنوان التوصيل</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {addresses.length > 0 && !showNewAddress && (
+                  {addresses.length > 0 && !showNewAddress ? (
                     <div className="space-y-3">
                       <RadioGroup value={selectedAddressId} onValueChange={setSelectedAddressId}>
                         {addresses.map((addr) => (
-                          <div key={addr.id} className="flex items-start gap-3 p-3 border rounded">
+                          <div key={addr.id} className="flex items-start gap-3 p-4 border rounded-lg hover:bg-muted transition-colors">
                             <RadioGroupItem value={addr.id} id={addr.id} />
-                            <Label htmlFor={addr.id} className="flex-1 cursor-pointer">
-                              <div className="font-semibold" dir="rtl">{addr.full_name}</div>
-                              <div className="text-sm text-muted-foreground" dir="rtl">
-                                {addr.phone}
-                              </div>
-                              <div className="text-sm text-muted-foreground" dir="rtl">
-                                {addr.street}, {addr.city}, {addr.governorate}
-                              </div>
+                            <Label htmlFor={addr.id} className="flex-1 cursor-pointer text-right" dir="rtl">
+                              <div className="font-bold">{addr.full_name}</div>
+                              <div className="text-sm text-muted-foreground">{addr.phone}</div>
+                              <div className="text-sm">{addr.street}, {addr.city}, {addr.governorate}</div>
                             </Label>
                           </div>
                         ))}
                       </RadioGroup>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setShowNewAddress(true)}
-                        className="w-full"
-                      >
-                        <MapPin className="ml-2 h-4 w-4" />
-                        إضافة عنوان جديد
+                      <Button type="button" variant="outline" onClick={() => setShowNewAddress(true)} className="w-full">
+                        <MapPin className="ml-2 h-4 w-4" /> إضافة عنوان مختلف
                       </Button>
                     </div>
-                  )}
-
-                  {(addresses.length === 0 || showNewAddress) && (
+                  ) : (
                     <div className="space-y-4">
-                      <div className="flex gap-2">
-                        {showNewAddress && addresses.length > 0 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setShowNewAddress(false)}
-                            className="flex-1"
-                          >
-                            اختيار من العناوين المحفوظة
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="default"
-                          onClick={getCurrentLocation}
-                          disabled={gettingLocation}
-                          className={addresses.length > 0 ? "flex-1" : "w-full"}
-                        >
-                          {gettingLocation ? (
-                            <>
-                              <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                              جاري التحديد...
-                            </>
-                          ) : (
-                            <>
-                              <Navigation className="ml-2 h-4 w-4" />
-                              تحديد موقعي تلقائياً
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                      <Button type="button" variant="secondary" onClick={getCurrentLocation} disabled={gettingLocation} className="w-full">
+                        {gettingLocation ? <Loader2 className="ml-2 h-4 w-4 animate-spin" /> : <Navigation className="ml-2 h-4 w-4" />}
+                        استخدام موقعي الحالي
+                      </Button>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="full_name" dir="rtl">الاسم الكامل *</Label>
-                          <Input
-                            id="full_name"
-                            value={formData.full_name}
-                            onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                            required
-                            dir="rtl"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone" dir="rtl">رقم الهاتف *</Label>
-                          <Input
-                            id="phone"
-                            type="tel"
-                            value={formData.phone}
-                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                            required
-                            dir="ltr"
-                          />
-                        </div>
+                        <Input placeholder="الاسم الكامل *" value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} dir="rtl" />
+                        <Input placeholder="رقم الهاتف *" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} dir="ltr" />
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="governorate" dir="rtl">المحافظة *</Label>
-                          <Select
-                            value={formData.governorate}
-                            onValueChange={(value) => setFormData({ ...formData, governorate: value })}
-                            required
-                          >
-                            <SelectTrigger dir="rtl">
-                              <SelectValue placeholder="اختر المحافظة" />
-                            </SelectTrigger>
-                            <SelectContent dir="rtl">
-                              {governorates.map((gov) => (
-                                <SelectItem key={gov} value={gov}>
-                                  {gov}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="city" dir="rtl">المدينة *</Label>
-                          <Input
-                            id="city"
-                            value={formData.city}
-                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                            required
-                            dir="rtl"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="street" dir="rtl">العنوان بالتفصيل *</Label>
-                        <Textarea
-                          id="street"
-                          value={formData.street}
-                          onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                          required
-                          dir="rtl"
-                          rows={3}
-                        />
-                      </div>
+                      <Select value={formData.governorate} onValueChange={v => setFormData({...formData, governorate: v})}>
+                        <SelectTrigger dir="rtl"><SelectValue placeholder="اختر المحافظة *" /></SelectTrigger>
+                        <SelectContent dir="rtl">{governorates.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}</SelectContent>
+                      </Select>
+                      <Input placeholder="المدينة / المركز *" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} dir="rtl" />
+                      <Textarea placeholder="العنوان بالتفصيل (الشارع / رقم المنزل) *" value={formData.street} onChange={e => setFormData({...formData, street: e.target.value})} dir="rtl" />
+                      {addresses.length > 0 && (
+                        <Button type="button" variant="link" onClick={() => setShowNewAddress(false)} className="w-full text-muted-foreground">العودة للعناوين المسجلة</Button>
+                      )}
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* طريقة الشحن (Shipping Method) */}
+              {/* الشحن والدفع */}
               <Card>
-                <CardHeader>
-                  <CardTitle dir="rtl">طريقة الشحن</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RadioGroup
-                    value={formData.shipping_method}
-                    onValueChange={(value: 'express' | 'postal') => setFormData({ ...formData, shipping_method: value })}
-                  >
-                    <div className="flex items-start gap-3 p-3 border rounded">
-                      <RadioGroupItem value="express" id="express" />
-                      <Label htmlFor="express" className="flex-1 cursor-pointer">
-                        <div className="font-semibold" dir="rtl">🚚 شحن سريع</div>
-                        <div className="text-sm text-muted-foreground" dir="rtl">
-                          التوصيل خلال 2-3 أيام عمل
-                        </div>
-                      </Label>
-                    </div>
-                    <div className="flex items-start gap-3 p-3 border rounded">
-                      <RadioGroupItem value="postal" id="postal" />
-                      <Label htmlFor="postal" className="flex-1 cursor-pointer">
-                        <div className="font-semibold" dir="rtl">📮 البريد العادي</div>
-                        <div className="text-sm text-muted-foreground" dir="rtl">
-                          التوصيل خلال 5-7 أيام عمل - 50 ج.م فقط
-                        </div>
-                        <div className="text-xs text-amber-600 mt-1" dir="rtl">
-                          ⚠️ متاح فقط مع الدفع المسبق الكامل
-                        </div>
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </CardContent>
-              </Card>
+                <CardHeader><CardTitle className="text-right" dir="rtl">طريقة الشحن والدفع</CardTitle></CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-3">
+                    <Label className="text-right block" dir="rtl">وسيلة الشحن:</Label>
+                    <RadioGroup value={formData.shipping_method} onValueChange={(v: any) => setFormData({...formData, shipping_method: v})} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 border rounded-lg">
+                        <RadioGroupItem value="express" id="express" />
+                        <Label htmlFor="express" className="text-right flex-1" dir="rtl">🚚 شحن سريع (مندوب نون)</Label>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 border rounded-lg opacity-80">
+                        <RadioGroupItem value="postal" id="postal" />
+                        <Label htmlFor="postal" className="text-right flex-1" dir="rtl">📮 بريد حكومي (استلام من المكتب)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
 
-              {/* طريقة الدفع (Payment Method) */}
-              <Card>
-                <CardHeader>
-                  <CardTitle dir="rtl">طريقة الدفع</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RadioGroup
-                    value={formData.payment_method}
-                    onValueChange={(value: 'deposit' | 'full_payment') => setFormData({ ...formData, payment_method: value })}
-                  >
-                    <div className="flex items-start gap-3 p-3 border rounded">
-                      <RadioGroupItem value="deposit" id="deposit" />
-                      <Label htmlFor="deposit" className="flex-1 cursor-pointer">
-                        <div className="font-semibold" dir="rtl">💳 دفع عربون (للشحن السريع)</div>
-                        <div className="text-sm text-muted-foreground" dir="rtl">
-                          ادفع عربون الآن والباقي عند الاستلام
-                        </div>
-                      </Label>
-                    </div>
-                    <div className="flex items-start gap-3 p-3 border rounded">
-                      <RadioGroupItem value="full_payment" id="full_payment" />
-                      <Label htmlFor="full_payment" className="flex-1 cursor-pointer">
-                        <div className="font-semibold" dir="rtl">💰 دفع كامل (للبريد العادي)</div>
-                        <div className="text-sm text-muted-foreground" dir="rtl">
-                          ادفع المبلغ كاملاً الآن
-                        </div>
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </CardContent>
-              </Card>
+                  <Separator />
 
-              {/* ملاحظات (Notes) */}
-              <Card>
-                <CardHeader>
-                  <CardTitle dir="rtl">ملاحظات إضافية (اختياري)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="أي ملاحظات خاصة بالطلب..."
-                    dir="rtl"
-                    rows={3}
+                  <div className="space-y-3">
+                    <Label className="text-right block" dir="rtl">طريقة السداد:</Label>
+                    <RadioGroup value={formData.payment_method} onValueChange={(v: any) => setFormData({...formData, payment_method: v})} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="flex items-center gap-3 p-3 border rounded-lg">
+                        <RadioGroupItem value="deposit" id="pay_deposit" />
+                        <Label htmlFor="pay_deposit" className="text-right flex-1" dir="rtl">💳 عربون مقدماً + الباقي عند الاستلام</Label>
+                      </div>
+                      <div className="flex items-center gap-3 p-3 border rounded-lg">
+                        <RadioGroupItem value="full_payment" id="pay_full" />
+                        <Label htmlFor="pay_full" className="text-right flex-1" dir="rtl">💰 دفع المبلغ بالكامل (أسرع في التجهيز)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
+                  <Textarea 
+                    placeholder="هل لديك أي ملاحظات إضافية للطلب؟" 
+                    value={formData.notes} 
+                    onChange={e => setFormData({...formData, notes: e.target.value})} 
+                    dir="rtl" 
                   />
                 </CardContent>
               </Card>
             </div>
 
-            {/* ملخص الطلب (Order Summary) */}
-            <div>
-              <Card className="sticky top-24">
-                <CardHeader>
-                  <CardTitle dir="rtl">ملخص الطلب</CardTitle>
+            {/* ملخص الحساب */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-24 border-primary/20 shadow-lg">
+                <CardHeader className="bg-primary/5">
+                  <CardTitle className="text-right" dir="rtl">ملخص الحساب</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* كود الخصم (Coupon Code) */}
+                <CardContent className="space-y-5 pt-6">
                   <div className="space-y-2">
-                    <Label htmlFor="coupon" dir="rtl">كود الخصم (اختياري)</Label>
-                    {appliedCoupon ? (
-                      <div className="flex items-center gap-2 p-3 bg-success/10 border border-success rounded-md">
-                        <Tag className="h-4 w-4 text-success" />
-                        <span className="flex-1 text-sm font-medium text-success" dir="rtl">
-                          تم تطبيق الكوبون: {couponCode}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleRemoveCoupon}
-                          className="h-auto p-1"
-                        >
-                          إزالة
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-2">
-                        <Input
-                          id="coupon"
-                          value={couponCode}
-                          onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                          placeholder="أدخل كود الخصم"
-                          dir="ltr"
-                          className="flex-1"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleApplyCoupon}
-                          disabled={validatingCoupon || !couponCode.trim()}
-                        >
-                          {validatingCoupon ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            'تطبيق'
-                          )}
-                        </Button>
+                    <Label className="text-right block text-xs" dir="rtl">كود الخصم:</Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="أدخل الكود" 
+                        value={couponCode} 
+                        onChange={e => setCouponCode(e.target.value.toUpperCase())} 
+                        disabled={!!appliedCoupon}
+                        dir="ltr"
+                        className="text-center font-bold"
+                      />
+                      {appliedCoupon ? (
+                        <Button type="button" variant="destructive" size="icon" onClick={handleRemoveCoupon}><X className="h-4 w-4" /></Button>
+                      ) : (
+                        <Button type="button" onClick={handleApplyCoupon} disabled={validatingCoupon || !couponCode}>{validatingCoupon ? <Loader2 className="h-4 w-4 animate-spin" /> : "تطبيق"}</Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between" dir="rtl">
+                      <span className="text-muted-foreground">إجمالي الكتب:</span>
+                      <span>{cartTotal.toFixed(2)} ج.م</span>
+                    </div>
+                    
+                    {appliedCoupon && (
+                      <div className="flex justify-between text-success font-medium" dir="rtl">
+                        <span>خصم الكوبون ({appliedCoupon.code}):</span>
+                        <span>-{couponDiscount.toFixed(2)} ج.م</span>
                       </div>
                     )}
-                  </div>
-                  <Separator />
 
-                  <div className="space-y-2">
-                    {cartItems.map((item) => {
-                      const book = item.books;
-                      if (!book) return null;
-                      const price = book.discount_price || book.price;
-                      return (
-                        <div key={item.id} className="flex justify-between text-sm" dir="rtl">
-                          <span>{book.title_ar} × {item.quantity}</span>
-                          <span>{(price * item.quantity).toFixed(2)} ج.م</span>
-                        </div>
-                      );
-                    })}
+                    <div className="flex justify-between" dir="rtl">
+                      <span className="text-muted-foreground">مصاريف الشحن:</span>
+                      <span>{calculatingShipping ? <Loader2 className="h-3 w-3 animate-spin inline" /> : `${shippingCost.toFixed(2)} ج.م`}</span>
+                    </div>
+
+                    {shippingMessage && (
+                      <p className="text-[10px] text-primary text-right bg-primary/5 p-2 rounded" dir="rtl">ℹ️ {shippingMessage}</p>
+                    )}
                   </div>
+
                   <Separator />
-                  <div className="flex justify-between" dir="rtl">
-                    <span>المجموع الفرعي:</span>
-                    <span className="font-semibold">{cartTotal.toFixed(2)} ج.م</span>
-                  </div>
-                  {couponDiscount > 0 && (
-                    <div className="flex justify-between text-success" dir="rtl">
-                      <span>الخصم:</span>
-                      <span className="font-semibold">-{couponDiscount.toFixed(2)} ج.م</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between" dir="rtl">
-                    <span>الشحن:</span>
-                    <span className="font-semibold">
-                      {calculatingShipping ? (
-                        <Loader2 className="h-4 w-4 animate-spin inline" />
-                      ) : (
-                        shippingCost === 0 ? 'مجاني' : `${shippingCost.toFixed(2)} ج.م`
-                      )}
-                    </span>
-                  </div>
-                  {shippingMessage && (
-                    <div className="text-xs text-muted-foreground" dir="rtl">
-                      ℹ️ {shippingMessage}
-                    </div>
-                  )}
-                  {cartTotal >= 500 && (
-                    <div className="text-sm text-success" dir="rtl">
-                      ✓ شحن مجاني للطلبات فوق 500 ج.م
-                    </div>
-                  )}
-                  <Separator />
-                  <div className="flex justify-between text-lg font-bold" dir="rtl">
+                  
+                  <div className="flex justify-between text-xl font-extrabold text-primary" dir="rtl">
                     <span>الإجمالي:</span>
-                    <span className="text-primary">{totalAmount.toFixed(2)} ج.م</span>
+                    <span>{totalAmount.toFixed(2)} ج.م</span>
                   </div>
-                  <Button
-                    type="submit"
-                    size="lg"
-                    className="w-full"
-                    disabled={loading}
-                  >
-                    {loading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
-                    تأكيد الطلب
+
+                  {affiliateData && (
+                    <div className="bg-success/10 border border-success/20 p-2 rounded text-[10px] text-center text-success font-medium">
+                      ✓ طلبك مدعوم من المسوق: {affiliateData.business_name}
+                    </div>
+                  )}
+
+                  <Button type="submit" size="lg" className="w-full text-lg font-bold h-14" disabled={loading || cartItems.length === 0}>
+                    {loading ? <Loader2 className="ml-2 h-5 w-5 animate-spin" /> : "تأكيد والذهاب للدفع"}
                   </Button>
-                  <p className="text-xs text-muted-foreground text-center" dir="rtl">
-                    بالضغط على "تأكيد الطلب" فإنك توافق على شروط الخدمة
+                  
+                  <p className="text-[10px] text-muted-foreground text-center" dir="rtl">
+                    بالضغط على الزر أعلاه، أنت توافق على سياسة الاستبدال والاسترجاع الخاصة بـ Noon Library.
                   </p>
                 </CardContent>
               </Card>

@@ -6,7 +6,7 @@ import type {
   Address,
   WishlistItem,
   CartItem,
-  Affiliate,
+  Affiliate,  
   AffiliateLink,
   AffiliateTracking,
   AdminNotification,
@@ -1013,18 +1013,36 @@ export const approvePaymentReceipt = async (
 };
 
 // Reject payment receipt (admin only)
-export const rejectPaymentReceipt = async (
-  receiptId: string,
-  adminId: string,
-  notes: string
-) => {
-  const { data, error } = await supabase.rpc('reject_payment_receipt', {
-    receipt_id_param: receiptId,
-    admin_id_param: adminId,
-    notes_param: notes
-  });
-  
+// ابحث عن الدالة دي في ملف api.ts واستبدلها بالآتي:
+export const rejectPaymentReceipt = async (receiptId: string, adminId: string, notes: string) => {
+  const { data, error } = await supabase
+    .from('payment_receipts')
+    .update({ 
+      status: 'rejected', 
+      admin_id: adminId, 
+      admin_notes: notes,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', receiptId)
+    .select();
+
   if (error) throw error;
+  
+  // تحديث حالة الطلب نفسه ليعرف العميل أنه مرفوض ويحتاج إعادة رفع
+  // استرجاع الـ order_id أولاً من الإيصال
+  const { data: receipt } = await supabase
+    .from('payment_receipts')
+    .select('order_id')
+    .eq('id', receiptId)
+    .single();
+
+  if (receipt) {
+    await supabase
+      .from('orders')
+      .update({ status: 'pending_payment' }) // نرجعه لحالة انتظار الدفع
+      .eq('id', receipt.order_id);
+  }
+
   return data;
 };
 
